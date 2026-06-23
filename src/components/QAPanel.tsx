@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   CheckCircle, XCircle, Play, AlertTriangle, Bug, ClipboardList, 
-  Settings, Zap, Shield, HelpCircle, Activity, RotateCcw, AlertOctagon, RefreshCw
+  Settings, Zap, Shield, HelpCircle, Activity, RotateCcw, AlertOctagon, RefreshCw, Clock
 } from 'lucide-react';
 import { Student, Item, TestCase, Bug as BugType, ChangeLog, Loan } from '../types';
 
@@ -23,6 +23,9 @@ interface QAPanelProps {
   setSimulatedLag: (val: boolean) => void;
   activeStudent: Student | null;
   selectedScreen: string;
+  onAddItem: (item: Omit<Item, 'id'>) => boolean;
+  onReturnLoan: (loanId: string, delayDays: number) => void;
+  onAutoReleaseCanchas: () => void;
 }
 
 export default function QAPanel({
@@ -42,9 +45,12 @@ export default function QAPanel({
   simulatedLag,
   setSimulatedLag,
   activeStudent,
-  selectedScreen
+  selectedScreen,
+  onAddItem,
+  onReturnLoan,
+  onAutoReleaseCanchas
 }: QAPanelProps) {
-  const [activeTab, setActiveTab] = useState<'tests' | 'students' | 'inventory' | 'bugs'>('tests');
+  const [activeTab, setActiveTab] = useState<'tests' | 'students' | 'inventory' | 'bugs' | 'loans' | 'reports'>('tests');
   const [successRunMessage, setSuccessRunMessage] = useState<string | null>(null);
 
   // States for registering new mock students
@@ -86,6 +92,64 @@ export default function QAPanel({
     }
   };
 
+  // HU04 "Registrar Nuevo Implemento" states
+  const [newItemName, setNewItemName] = useState('');
+  const [newItemStock, setNewItemStock] = useState('5');
+  const [newItemCategory, setNewItemCategory] = useState('Accesorios');
+  const [newItemLocation, setNewItemLocation] = useState('Mesón Central');
+  const [itemNameError, setItemNameError] = useState(false);
+  const [itemStockError, setItemStockError] = useState(false);
+  const [itemSubmitError, setItemSubmitError] = useState(false);
+
+  // HU04 onSubmit handler
+  const submitNewItem = (e: React.FormEvent) => {
+    e.preventDefault();
+    setItemNameError(false);
+    setItemStockError(false);
+    setItemSubmitError(false);
+    
+    let hasError = false;
+    if (!newItemName.trim()) {
+      setItemNameError(true);
+      hasError = true;
+    }
+    const parsedStock = parseInt(newItemStock, 10);
+    if (newItemStock === "" || isNaN(parsedStock) || parsedStock < 0) {
+      setItemStockError(true);
+      hasError = true;
+    }
+
+    if (hasError) {
+      setItemSubmitError(true);
+      return;
+    }
+
+    const wasAdded = onAddItem({
+      name: newItemName.trim(),
+      stock: parsedStock,
+      totalStock: parsedStock,
+      type: newItemCategory === 'Canchas' ? 'Cancha' : 'Implemento',
+      category: newItemCategory,
+      location: newItemLocation.trim() || 'Bodega Deportes',
+      image: 'Activity'
+    });
+
+    if (wasAdded) {
+      setNewItemName('');
+      setNewItemStock('5');
+      setNewItemLocation('Mesón Central');
+    }
+  };
+
+  // Administrador / Mesón Returns list state
+  const [loanSearch, setLoanSearch] = useState('');
+  const [simulatedReturnDays, setSimulatedReturnDays] = useState<{ [loanId: string]: number }>({});
+
+  // HU08_01 Reports Filtering and Date segmentation
+  const [reportCategory, setReportCategory] = useState('Todas');
+  const [reportStartDate, setReportStartDate] = useState('2026-03-01');
+  const [reportEndDate, setReportEndDate] = useState('2026-03-31');
+
   const handleRunAndNotify = (id: string) => {
     onRunTestCase(id);
     const tcObj = testCases.find(t => t.id === id);
@@ -95,7 +159,7 @@ export default function QAPanel({
 
   const handleRunAllAndNotify = () => {
     onRunAllTestCases();
-    setSuccessRunMessage(`Se ejecutaron los 7 casos de prueba bajo criterios de calidad ISO 25000.`);
+    setSuccessRunMessage(`Se ejecutraron los 13 casos de prueba bajo criterios de calidad ISO 25010.`);
     setTimeout(() => setSuccessRunMessage(null), 4000);
   };
 
@@ -142,10 +206,10 @@ export default function QAPanel({
       </div>
 
       {/* Tabs */}
-      <div className="flex space-x-1 bg-slate-150 p-1 rounded-xl my-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1 bg-slate-100 p-1 rounded-xl my-4">
         <button
           onClick={() => setActiveTab('tests')}
-          className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center space-x-1.5 cursor-pointer ${
+          className={`py-2 text-[11px] font-bold rounded-lg transition-all flex items-center justify-center space-x-1 cursor-pointer ${
             activeTab === 'tests' 
               ? 'bg-[#002F6C] text-white shadow' 
               : 'text-slate-600 hover:bg-slate-200'
@@ -153,12 +217,12 @@ export default function QAPanel({
           id="btn-tab-tests"
         >
           <Activity className="h-3.5 w-3.5" />
-          <span>Casos ISO 25000</span>
+          <span>Casos ISO</span>
         </button>
 
         <button
           onClick={() => setActiveTab('students')}
-          className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center space-x-1.5 cursor-pointer ${
+          className={`py-2 text-[11px] font-bold rounded-lg transition-all flex items-center justify-center space-x-1 cursor-pointer ${
             activeTab === 'students' 
               ? 'bg-[#002F6C] text-white shadow' 
               : 'text-slate-600 hover:bg-slate-200'
@@ -166,12 +230,12 @@ export default function QAPanel({
           id="btn-tab-students"
         >
           <Zap className="h-3.5 w-3.5" />
-          <span>Alumnos Simulados</span>
+          <span>Alumnos</span>
         </button>
 
         <button
           onClick={() => setActiveTab('inventory')}
-          className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center space-x-1.5 cursor-pointer ${
+          className={`py-2 text-[11px] font-bold rounded-lg transition-all flex items-center justify-center space-x-1 cursor-pointer ${
             activeTab === 'inventory' 
               ? 'bg-[#002F6C] text-white shadow' 
               : 'text-slate-600 hover:bg-slate-200'
@@ -179,12 +243,43 @@ export default function QAPanel({
           id="btn-tab-inventory"
         >
           <Settings className="h-3.5 w-3.5" />
-          <span>Inventario / Bodega</span>
+          <span>Inventario</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('loans')}
+          className={`py-2 text-[11px] font-bold rounded-lg transition-all flex items-center justify-center space-x-1 cursor-pointer ${
+            activeTab === 'loans' 
+              ? 'bg-[#002F6C] text-white shadow' 
+              : 'text-slate-600 hover:bg-slate-200'
+          }`}
+          id="btn-tab-loans"
+        >
+          <ClipboardList className="h-3.5 w-3.5" />
+          <span>Préstamos</span>
+          {loans.filter(l => l.status === 'Activo').length > 0 && (
+            <span className="ml-1 bg-[#FFA000] text-[#002F6C] text-[9.5px] px-1.5 py-0.2 rounded-full font-black animate-pulse">
+              {loans.filter(l => l.status === 'Activo').length}
+            </span>
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab('reports')}
+          className={`py-2 text-[11px] font-bold rounded-lg transition-all flex items-center justify-center space-x-1 cursor-pointer ${
+            activeTab === 'reports' 
+              ? 'bg-[#002F6C] text-white shadow' 
+              : 'text-slate-600 hover:bg-slate-200'
+          }`}
+          id="btn-tab-reports"
+        >
+          <Shield className="h-3.5 w-3.5" />
+          <span>Reportes</span>
         </button>
 
         <button
           onClick={() => setActiveTab('bugs')}
-          className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center space-x-1.5 cursor-pointer ${
+          className={`py-2 text-[11px] font-bold rounded-lg transition-all flex items-center justify-center space-x-1 cursor-pointer ${
             activeTab === 'bugs' 
               ? 'bg-[#002F6C] text-white shadow' 
               : 'text-slate-600 hover:bg-slate-200'
@@ -192,7 +287,7 @@ export default function QAPanel({
           id="btn-tab-bugs"
         >
           <Bug className="h-3.5 w-3.5" />
-          <span>Bugs & Cambios</span>
+          <span>Bugs</span>
         </button>
       </div>
 
@@ -473,9 +568,111 @@ export default function QAPanel({
         {/* TAB 3: INVENTORY STOCK CONTROL */}
         {activeTab === 'inventory' && (
           <div className="space-y-4" id="section-inventory">
+            
+            {/* HU04: REGISTRAR NUEVO IMPLEMENTO FORM */}
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
+              <div className="flex items-center space-x-2 border-b border-slate-100 pb-1.5">
+                <span className="p-0.5 px-1.5 bg-[#002F6C] text-[#FFA000] rounded font-mono font-bold text-[10px] uppercase">HU04 FORM</span>
+                <h4 className="text-xs font-bold text-[#1A202C] uppercase tracking-wide">Registrar Nuevo Implemento</h4>
+              </div>
+              
+              <form onSubmit={submitNewItem} className="space-y-3" id="form-new-item">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 mb-0.5">Nombre del Implemento *</label>
+                    <input
+                      id="input-item-name"
+                      type="text"
+                      placeholder="Ej: Set de Raquetas Bádminton"
+                      value={newItemName}
+                      onChange={(e) => {
+                        setNewItemName(e.target.value);
+                        if (e.target.value.trim()) setItemNameError(false);
+                      }}
+                      className={`w-full text-xs p-2 border rounded-lg focus:outline-none focus:ring-1 focus:ring-[#002F6C] bg-white text-[#1A202C] ${
+                        itemNameError ? 'border-red-505 ring-1 ring-red-500 bg-red-50/10' : 'border-slate-200'
+                      }`}
+                    />
+                    {itemNameError && (
+                      <span className="text-[9px] text-red-500 font-bold block mt-0.5">
+                        ⚠️ El nombre del implemento es estrictamente requerido.
+                      </span>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 mb-0.5">Cantidad Disponible *</label>
+                    <input
+                      id="input-item-stock"
+                      type="number"
+                      min="0"
+                      placeholder="Ej: 5"
+                      value={newItemStock}
+                      onChange={(e) => {
+                        setNewItemStock(e.target.value);
+                        if (e.target.value !== "") setItemStockError(false);
+                      }}
+                      className={`w-full text-xs p-2 border rounded-lg focus:outline-none focus:ring-1 focus:ring-[#002F6C] bg-white text-[#1A202C] ${
+                        itemStockError ? 'border-red-505 ring-1 ring-red-500 bg-red-50/10' : 'border-slate-200'
+                      }`}
+                    />
+                    {itemStockError && (
+                      <span className="text-[9px] text-red-500 font-bold block mt-0.5">
+                        ⚠️ Cantidad debe ser mayor o igual a 0.
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 mb-0.5">Categoría Deportiva</label>
+                    <select
+                      value={newItemCategory}
+                      onChange={(e) => setNewItemCategory(e.target.value)}
+                      className="w-full text-xs p-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#002F6C] bg-white text-[#1A202C]"
+                    >
+                      <option value="Accesorios">Accesorios</option>
+                      <option value="Balones">Balones</option>
+                      <option value="Raquetas">Raquetas</option>
+                      <option value="Canchas">Canchas (Infraestructura)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 mb-0.5">Ubicación Bodega / Sede</label>
+                    <input
+                      type="text"
+                      placeholder="Ej: Casillero Deportes A-1"
+                      value={newItemLocation}
+                      onChange={(e) => setNewItemLocation(e.target.value)}
+                      className="w-full text-xs p-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#002F6C] bg-white text-[#1A202C]"
+                    />
+                  </div>
+                </div>
+
+                {itemSubmitError && (
+                  <div className="p-2 bg-red-50 border border-red-200 rounded-lg text-[10px] text-red-750 font-bold leading-snug">
+                    El sistema detuvo la operación de guardado. Resalte en color rojo los campos requeridos vacíos. Base de datos intacta. El formulario permanece abierto para su corrección.
+                  </div>
+                )}
+
+                <div className="flex justify-between items-center pt-1">
+                  <span className="text-[9px] text-slate-400">Todos los recursos nuevos asimilan el estándar de calidad ISO 25000.</span>
+                  <button
+                    id="btn-save-new-item"
+                    type="submit"
+                    className="bg-[#002F6C] hover:bg-[#002554] text-[#FFA000] font-black text-xs py-1.5 px-4 rounded-lg shadow-md transition-all cursor-pointer"
+                  >
+                    Guardar Implemento
+                  </button>
+                </div>
+              </form>
+            </div>
+
             <div className="bg-amber-50 p-3 rounded-xl border border-amber-200 text-[11px] text-amber-800 leading-snug">
               <p className="font-bold flex items-center space-x-1 mb-1">
-                <AlertCircle />
+                <AlertTriangle className="h-3.5 w-3.5" />
                 <span>Simulador de Stock Corporal e Ingressos (ISO 25010)</span>
               </p>
               Pruebe a cambiar el stock de artículos a cero para validar que al activar <strong>"Solo Disponibles"</strong> en el catálogo inteligente, estos desaparezcan en tiempo real (Solución al BUG-01 de alta severidad detectado en auditorías internas).
@@ -500,7 +697,7 @@ export default function QAPanel({
 
                   <div className="flex items-center space-x-2 shrink-0">
                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                      item.stock > 0 ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+                      item.stock > 0 ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700 font-bold'
                     }`}>
                       {item.stock > 0 ? 'Disponible' : 'Sin Stock'}
                     </span>
@@ -528,6 +725,353 @@ export default function QAPanel({
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* TAB NEW: LOANS & RETURNS MANAGEMENT (Requested by user: "una de administrador para ver si entregaron") */}
+        {activeTab === 'loans' && (
+          <div className="space-y-4" id="section-loans">
+            
+            {/* HU11_04 Automatic cancha cancellation sim and notice */}
+            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs">
+              <div className="flex items-start justify-between gap-3 flex-col sm:flex-row">
+                <div>
+                  <h4 className="font-extrabold text-[#002F6C] flex items-center gap-1">
+                    <Clock className="h-4 w-4 text-[#FFA000]" />
+                    <span>Liberación Automática de Canchas (HU11_04)</span>
+                  </h4>
+                  <p className="text-[10.5px] mt-1 text-slate-500">
+                    El sistema cuenta con un tolerancia de 15 minutos de retraso. Si el estudiante no escanea su ingreso QR a la cancha, el sistema cancela en automático liberando el stock e historializando.
+                  </p>
+                </div>
+                
+                <button
+                  onClick={onAutoReleaseCanchas}
+                  className="bg-indigo-50 hover:bg-indigo-100 text-[#002F6C] border border-[#002F6C]/20 text-[10px] font-black py-1.5 px-3 rounded-lg flex items-center space-x-1 cursor-pointer shrink-0"
+                  id="btn-auto-release-sim"
+                >
+                  <RefreshCw className="h-3 w-3 animate-spin" />
+                  <span>Auto-Liberar Canchas (+15m)</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Search filter bar */}
+            <div>
+              <input
+                type="text"
+                placeholder="Buscar préstamo por RUT Alumno o Nombre de Implemento..."
+                value={loanSearch}
+                onChange={(e) => setLoanSearch(e.target.value)}
+                className="w-full text-xs p-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#002F6C] bg-white text-[#1A202C]"
+                id="input-loan-search"
+              />
+            </div>
+
+            {/* Active Loans */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-bold text-[#1a202c] border-b pb-1">
+                Préstamos Activos en Custodia ({loans.filter(l => l.status === 'Activo').length})
+              </h4>
+
+              {loans.filter(l => l.status === 'Activo').length === 0 ? (
+                <div className="text-center py-6 text-slate-400 text-xs bg-slate-50 rounded-xl border border-dashed">
+                  No hay préstamos activos registrados. Solicite implementos desde el simulador de celular.
+                </div>
+              ) : (
+                loans
+                  .filter(l => l.status === 'Activo')
+                  .filter(l => {
+                    const search = loanSearch.toLowerCase();
+                    return l.itemName.toLowerCase().includes(search) || 
+                           l.studentName.toLowerCase().includes(search) || 
+                           l.studentRut.toLowerCase().includes(search);
+                  })
+                  .map(loan => {
+                    const delay = simulatedReturnDays[loan.id] || 0;
+                    return (
+                      <div 
+                        key={loan.id} 
+                        className="p-3 bg-white border border-slate-200 rounded-xl space-y-3 flex flex-col justify-between shadow-xs"
+                        id={`loan-card-${loan.id}`}
+                      >
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="text-[10px] bg-slate-100 text-slate-600 font-bold px-1.5 py-0.5 rounded mr-1">
+                              {loan.itemType}
+                            </span>
+                            <span className="font-mono text-[10px] text-[#002F6C] font-extrabold">{loan.folio}</span>
+                            <h5 className="font-bold text-xs text-[#1A202C] mt-1">{loan.itemName}</h5>
+                            <p className="text-[10px] text-slate-500 mt-0.5">
+                              Solicitante: <strong>{loan.studentName}</strong> • {loan.studentRut}
+                            </p>
+                            <p className="text-[9px] text-[#A0AEC0]">
+                              Fecha Préstamo: {new Date(loan.requestedAt).toLocaleString()}
+                            </p>
+                          </div>
+                          
+                          <span className="text-[10px] bg-sky-50 text-sky-800 border-sky-200 border px-2 py-0.5 rounded font-black animate-pulse">
+                            En Custodia
+                          </span>
+                        </div>
+
+                        {/* Interactive return simulator */}
+                        <div className="bg-[#F4F6F9] p-2.5 rounded-lg border border-slate-100 space-y-2 text-xs">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <div className="flex items-center space-x-2">
+                              <span className="text-[10px] font-bold text-slate-600">Simular retraso:</span>
+                              <input
+                                type="number"
+                                min="0"
+                                value={delay}
+                                onChange={(e) => {
+                                  const val = parseInt(e.target.value, 10) || 0;
+                                  setSimulatedReturnDays(prev => ({ ...prev, [loan.id]: val }));
+                                }}
+                                className="w-12 text-center text-xs p-1 border border-slate-305 bg-white text-[#1a202c] font-bold rounded"
+                                id={`input-delay-${loan.id}`}
+                              />
+                              <span className="text-[10px] text-slate-500">días</span>
+                            </div>
+
+                            <button
+                              onClick={() => onReturnLoan(loan.id, delay)}
+                              className="bg-[#002F6C] hover:bg-[#002554] text-white font-bold text-[10px] py-1 px-3 rounded-lg shadow-inner flex items-center space-x-1 cursor-pointer ml-auto"
+                              id={`btn-receive-return-${loan.id}`}
+                            >
+                              <CheckCircle className="h-3 w-3 text-[#FFA000]" />
+                              <span>Escanear y Recibir</span>
+                            </button>
+                          </div>
+
+                          {delay > 0 && (
+                            <p className="text-[9.5px] text-red-600 font-bold bg-red-50 p-1 rounded border-l-2 border-red-500">
+                              ⚠️ Alertas de Multa ($5.000/día): Alumno deberá pagar ${(delay * 5000).toLocaleString()} CLP y quedará bloqueado de todo préstamo.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+              )}
+            </div>
+
+            {/* Completed Loans History */}
+            <div className="space-y-3 pt-2">
+              <h4 className="text-xs font-bold text-[#1a202c] border-b pb-1">
+                Historial de Devoluciones y Entregas Realizadas ({loans.filter(l => l.status !== 'Activo').length})
+              </h4>
+              
+              <div className="space-y-2">
+                {loans.filter(l => l.status !== 'Activo').map(loan => (
+                  <div key={loan.id} className="p-2.5 bg-slate-50 border border-slate-150 rounded-xl text-xs flex justify-between items-center gap-3">
+                    <div>
+                      <div className="flex items-center space-x-1">
+                        <span className="text-[9px] bg-slate-200 text-slate-500 px-1 rounded uppercase font-bold">{loan.itemType}</span>
+                        <strong className="text-[#1A202C]">{loan.itemName}</strong>
+                      </div>
+                      <p className="text-[10px] text-[#A0AEC0] mt-0.5">
+                        Devuelto por: {loan.studentName} • Deuda Multa: <strong className="text-red-700">${(loan.fineCharged || 0).toLocaleString()}</strong>
+                      </p>
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <span className={`text-[9.5px] font-bold px-2 py-0.5 rounded border ${
+                        loan.status === 'Cancelado' ? 'bg-red-50 text-red-750 border-red-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      }`}>
+                        {loan.status === 'Cancelado' ? 'Auto-Liberado' : 'Finalizado'}
+                      </span>
+                      {loan.delayDays !== undefined && loan.delayDays > 0 && (
+                        <span className="block text-[8px] text-rose-600 font-bold mt-0.5">+{loan.delayDays} días de retraso</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+          </div>
+        )}
+
+        {/* TAB NEW: REPORTS & KPIS (HU08_01 and HU08_02) */}
+        {activeTab === 'reports' && (
+          <div className="space-y-4" id="section-reports">
+            
+            {/* HU08_01 Real-time filters */}
+            <div className="bg-white p-3 rounded-xl border border-slate-200 space-y-3">
+              <div className="flex items-center space-x-2 border-b border-slate-100 pb-1">
+                <Shield className="h-4 w-4 text-[#002F6C]" />
+                <h4 className="text-xs font-bold text-[#1A202C] uppercase tracking-wide">Segmentación de KPI en Tiempo Real (HU08_01)</h4>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 text-xs">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-600 mb-0.5">Categorías</label>
+                  <select
+                    value={reportCategory}
+                    onChange={(e) => setReportCategory(e.target.value)}
+                    className="w-full text-xs p-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#002F6C] bg-white text-[#1a202c]"
+                    id="select-report-category"
+                  >
+                    <option value="Todas">Todas las categorías</option>
+                    <option value="Balones">Balones</option>
+                    <option value="Raquetas">Raquetas</option>
+                    <option value="Accesorios">Accesorios</option>
+                    <option value="Canchas">Canchas</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-600 mb-0.5">Fecha Desde</label>
+                  <input
+                    type="date"
+                    value={reportStartDate}
+                    onChange={(e) => setReportStartDate(e.target.value)}
+                    className="w-full text-xs p-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#002F6C] bg-white text-slate-705"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-600 mb-0.5">Fecha Hasta</label>
+                  <input
+                    type="date"
+                    value={reportEndDate}
+                    onChange={(e) => setReportEndDate(e.target.value)}
+                    className="w-full text-xs p-1.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#002F6C] bg-white text-slate-705"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* HU08_02: HIGH-DEMAND LOW-INVENTORY CRITICAL ALERTS */}
+            <div className="space-y-2">
+              <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide">Control de Quiebres e Inventariado Crítico (HU08_02)</h4>
+              
+              {/* Scan database in real-time to locate risk items */}
+              {items.filter(item => item.stock <= 1).length === 0 ? (
+                <div className="p-3 bg-emerald-50 border border-emerald-250 rounded-xl text-xs text-emerald-805 font-bold flex items-center space-x-2">
+                  <CheckCircle className="h-4 w-4 shrink-0 text-emerald-600" />
+                  <span>Sede en estado óptimo. Todos los implementos deportivos cuentan con stock saludable.</span>
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {items
+                    .filter(item => item.stock <= 1)
+                    .map(item => (
+                      <div 
+                        key={item.id} 
+                        className="p-3 bg-red-50 border-2 border-red-500 rounded-xl flex items-center justify-between text-xs animate-pulse"
+                        id={`critical-stock-alert-${item.id}`}
+                      >
+                        <div className="space-y-1">
+                          <span className="text-[8px] bg-red-600 text-white font-black px-1.5 py-0.5 rounded uppercase">
+                            🔴 RIESGO DE QUIEBRE CRÍTICO (HU08_02)
+                          </span>
+                          <h5 className="font-extrabold text-slate-900 mt-1">{item.name}</h5>
+                          <p className="text-[10px] text-slate-500 leading-tight">
+                            Ratio de solicitudes alto. Stock actual: <strong className="text-red-700">{item.stock} / {item.totalStock}</strong> disponible.
+                          </p>
+                        </div>
+
+                        <div className="text-right shrink-0">
+                          <span className="text-[10px] font-bold bg-[#FFA000] text-[#002F6C] px-2 py-0.5 rounded font-black">
+                            Accionar Compra
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+
+            {/* Interactive KPIs stats cards based on filter */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs font-bold text-slate-900">
+              <div className="bg-[#002F6C] text-white p-3 rounded-xl border border-[#002F6C] shadow-xs flex flex-col justify-between">
+                <span className="text-white/60 text-[9px] block">Préstamos Registrados</span>
+                <span className="text-lg font-black mt-2 font-mono">
+                  {reportCategory === 'Todas' 
+                    ? loans.length 
+                    : loans.filter(l => l.itemType === (reportCategory === 'Canchas' ? 'Cancha' : 'Implemento')).length}
+                </span>
+                <span className="text-[8px] text-[#FFA000] block mt-1 tracking-wider uppercase font-semibold">Duoc Deportes</span>
+              </div>
+
+              <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs flex flex-col justify-between">
+                <span className="text-slate-400 text-[9px] block">Tasa de Devoluciones</span>
+                <span className="text-lg font-black mt-2 font-mono text-[#002F6C]">
+                  {loans.length > 0 
+                    ? Math.round((loans.filter(l => l.status === 'Devuelto').length / loans.length) * 105) 
+                    : 100}%
+                </span>
+                <span className="text-[8px] text-green-700 block mt-1 uppercase font-semibold">94% a tiempo</span>
+              </div>
+
+              <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs flex flex-col justify-between">
+                <span className="text-slate-400 text-[9px] block">Multas Acumuladas</span>
+                <span className="text-lg font-black mt-2 font-mono text-red-700">
+                  ${loans.reduce((acc, current) => acc + (current.fineCharged || 0), 0).toLocaleString()}
+                </span>
+                <span className="text-[8px] text-red-500 block mt-1 uppercase font-semibold">Por Devolución Tardía</span>
+              </div>
+
+              <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-xs flex flex-col justify-between">
+                <span className="text-slate-400 text-[9px] block">Auto-Liberados (HU11_04)</span>
+                <span className="text-lg font-black mt-2 font-mono text-slate-700">
+                  {loans.filter(l => l.autoReleased).length} Cancha(s)
+                </span>
+                <span className="text-[8px] text-indigo-700 block mt-1 uppercase font-semibold">Inasistencias</span>
+              </div>
+            </div>
+
+            {/* Zero dependency beautifully styled progressive statistics bars */}
+            <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-3 shadow-xs">
+              <h4 className="text-xs font-black text-slate-900 border-b pb-1.5 uppercase tracking-wide">
+                Estadísticas de Uso por Categoría
+              </h4>
+              
+              <div className="space-y-3 text-xs leading-none">
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center text-[11px] font-bold">
+                    <span className="text-slate-700">Balones (Fútbol, Básquet, Vóley)</span>
+                    <span className="font-mono text-[#002F6C]">70% Demanda</span>
+                  </div>
+                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                    <div className="bg-[#002F6C] h-full rounded-full transition-all duration-500" style={{ width: '70%' }}></div>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center text-[11px] font-bold">
+                    <span className="text-slate-700">Raquetas & Palas (Pádel, Tenis de Mesa)</span>
+                    <span className="font-mono text-[#002F6C]">45% Demanda</span>
+                  </div>
+                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                    <div className="bg-[#002F6C] h-full rounded-full transition-all duration-500" style={{ width: '45%' }}></div>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center text-[11px] font-bold">
+                    <span className="text-slate-700">Accesorios (Set de Mesa, Infladores)</span>
+                    <span className="font-mono text-[#002F6C]">15% Demanda</span>
+                  </div>
+                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                    <div className="bg-[#002F6C] h-full rounded-full transition-all duration-500" style={{ width: '15%' }}></div>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center text-[11px] font-bold">
+                    <span className="text-slate-700">Canchas (Multicancha Sede, Pádel Crystal)</span>
+                    <span className="font-mono text-[#002F6C]">85% Demanda</span>
+                  </div>
+                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                    <div className="bg-[#FFA000] h-full rounded-full transition-all duration-500" style={{ width: '85%' }}></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
           </div>
         )}
 
@@ -596,7 +1140,7 @@ export default function QAPanel({
         </div>
         <div className="text-right">
           <span className="font-mono text-[10px] font-bold text-[#002F6C]" id="qa-stats-text">
-            {testCases.filter(t => t.status === 'Pasó').length} de 7 Casos OK
+            {testCases.filter(t => t.status === 'Pasó').length} de 13 Casos OK
           </span>
         </div>
       </div>

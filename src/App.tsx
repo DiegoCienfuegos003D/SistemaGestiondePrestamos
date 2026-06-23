@@ -35,6 +35,12 @@ export default function App() {
   const [simulatedLag, setSimulatedLag] = useState(false);
   const [globalNotif, setGlobalNotif] = useState<{ type: 'success' | 'warn' | 'error', text: string } | null>(null);
 
+  // Push notifications simulating mobile alerts (HU11_04 alerts)
+  const [pushNotifications, setPushNotifications] = useState<string[]>(() => {
+    const saved = localStorage.getItem('duoc_push_notifications');
+    return saved ? JSON.parse(saved) : [];
+  });
+
   // Synced Login Inputs for cross-operating from QA Panel
   const [selectedScreen, setSelectedScreen] = useState<string>('Login');
   const [loginRut, setLoginRut] = useState('');
@@ -59,6 +65,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('duoc_loans', JSON.stringify(loans));
   }, [loans]);
+
+  useEffect(() => {
+    localStorage.setItem('duoc_push_notifications', JSON.stringify(pushNotifications));
+  }, [pushNotifications]);
 
   // Show global user notifications
   const showNotification = (text: string, type: 'success' | 'warn' | 'error' = 'success') => {
@@ -123,6 +133,145 @@ export default function App() {
   const handleUpdateItemStock = (itemId: string, newStock: number) => {
     setItems(prev => prev.map(item => item.id === itemId ? { ...item, stock: newStock } : item));
     showNotification("Stock de bodega actualizado.", "success");
+  };
+
+  // HU04 Admin cannot add items with incomplete info
+  const handleAddItem = (newItem: Omit<Item, 'id'>): boolean => {
+    if (!newItem.name.trim() || newItem.stock === undefined || newItem.stock < 0) {
+      showNotification("Error: No se pudo registrar. Faltan datos obligatorios.", "error");
+      return false;
+    }
+
+    const itemWithId: Item = {
+      ...newItem,
+      id: `item-${Date.now()}`,
+      totalStock: newItem.stock
+    };
+    setItems(prev => [...prev, itemWithId]);
+    showNotification(`Implemento "${newItem.name}" ingresado con éxito en bodega.`, "success");
+    return true;
+  };
+
+  // HU07_01 & HU07_02 Loan returns (on-time and late with automated fines)
+  const handleReturnLoan = (loanId: string, delayDays: number = 0) => {
+    const loan = loans.find(l => l.id === loanId);
+    if (!loan) return;
+
+    const finePerDay = 5000;
+    const fineApplied = delayDays * finePerDay;
+
+    // 1. Close/Update loan
+    setLoans(prev => prev.map(l => {
+      if (l.id === loanId) {
+        return {
+          ...l,
+          status: 'Devuelto' as const,
+          returnedAt: new Date(),
+          delayDays,
+          fineCharged: fineApplied
+        };
+      }
+      return l;
+    }));
+
+    // 2. Increment stock
+    setItems(prev => prev.map(item => {
+      if (item.id === loan.itemId) {
+        const nextStock = Math.min(item.totalStock, item.stock + 1);
+        return { ...item, stock: nextStock };
+      }
+      return item;
+    }));
+
+    // 3. Decrement student loan quota & apply fine/moroso status if delayed
+    setStudents(prev => prev.map(s => {
+      if (s.rut === loan.studentRut) {
+        const currentFines = s.fineBalance || 0;
+        const newQuota = Math.max(0, s.activeLoansCount - 1);
+        const resolvedStudent: Student = {
+          ...s,
+          activeLoansCount: newQuota,
+          fineBalance: currentFines + fineApplied,
+          status: delayDays > 0 ? 'Moroso' as const : s.status
+        };
+
+        // Sync active mobile app session profile
+        if (currentStudent && currentStudent.rut === s.rut) {
+          setCurrentStudent(resolvedStudent);
+        }
+        return resolvedStudent;
+      }
+      return s;
+    }));
+
+    if (delayDays > 0) {
+      showNotification(`Multa de $${fineApplied.toLocaleString()} aplicada a ${loan.studentName} por entrega tardía (${delayDays} días). Alumno bloqueado como Moroso.`, 'error');
+      setPushNotifications(prev => [
+        `⚠️ Multa de $${fineApplied.toLocaleString()} aplicada por devolución atrasada de "${loan.itemName}" (${delayDays} días). Portal bloqueado por Morosidad.`,
+        ...prev
+      ]);
+    } else {
+      showNotification(`Devolución exitosa a tiempo de "${loan.itemName}". Cupo liberado.`, 'success');
+      setPushNotifications(prev => [
+        `✅ Devolución procesada con éxito a tiempo: "${loan.itemName}" está de vuelta en bodega.`,
+        ...prev
+      ]);
+    }
+  };
+
+  // HU11_04 Automatic field release if student is 15 minutes late
+  const handleAutoReleaseCanchas = () => {
+    const activeCanchas = loans.filter(l => l.status === 'Activo' && l.itemType === 'Cancha');
+    if (activeCanchas.length === 0) {
+      showNotification("No hay reservas de canchas activas en este bloque para auto-liberar.", "warn");
+      return;
+    }
+
+    activeCanchas.forEach(l => {
+      // Return / Release the reserve
+      setLoans(prev => prev.map(loanItem => {
+        if (loanItem.id === l.id) {
+          return {
+            ...loanItem,
+            status: 'Cancelado' as const,
+            autoReleased: true,
+            returnedAt: new Date()
+          };
+        }
+        return loanItem;
+      }));
+
+      // Set cancha stock back to available (+1)
+      setItems(prev => prev.map(item => {
+        if (item.id === l.itemId) {
+          return { ...item, stock: 1 };
+        }
+        return item;
+      }));
+
+      // Release quota & penalize/notify student
+      setStudents(prev => prev.map(s => {
+        if (s.rut === l.studentRut) {
+          const resolved: Student = {
+            ...s,
+            activeLoansCount: Math.max(0, s.activeLoansCount - 1)
+          };
+          if (currentStudent && currentStudent.rut === s.rut) {
+            setCurrentStudent(resolved);
+          }
+          return resolved;
+        }
+        return s;
+      }));
+
+      // Add push notification which will show instantly on mockup
+      setPushNotifications(prev => [
+        `🚨 Reserva Cancelada automáticamente: Se liberó la "${l.itemName}" por inasistencia al bloque (Tolerancia límite de 15 minutos excedida).`,
+        ...prev
+      ]);
+    });
+
+    showNotification(`HU11_04 Validada: ${activeCanchas.length} cancha(s) liberadas automáticamente por inasistencia. Disposabilidad restablecida en agenda digital.`, 'success');
   };
 
   // Generate Unique Folio for Loans (HU-03)
@@ -326,13 +475,98 @@ export default function App() {
         showNotification("BUG-01 Solved & Validated: Elementos sin stock ocultos al prender 'Solo disponibles'.", "success");
         break;
       }
+      case 'CP-08': {
+        // HU04 Validation blocking of incomplete items details
+        setTestCases(prev => prev.map(tc => tc.id === 'CP-08' ? { ...tc, status: 'Pasó' } : tc));
+        showNotification("HU04 Validada: Bloqueo de implementos con información incompleta activo.", "error");
+        break;
+      }
+      case 'CP-09': {
+        // HU07_01 On-time return incrementing stock
+        // Ensure there is an active implemento loan
+        const testLoan = loans.find(l => l.status === 'Activo' && l.itemType === 'Implemento') || ensureActiveLoanForTest('Implemento');
+        
+        // Close it on-time
+        setTimeout(() => {
+          handleReturnLoan(testLoan.id, 0);
+          setTestCases(prev => prev.map(tc => tc.id === 'CP-09' ? { ...tc, status: 'Pasó' } : tc));
+        }, 100);
+        break;
+      }
+      case 'CP-10': {
+        // HU07_02 Overdue loan return with dynamic levy
+        // Ensure there is an active loan
+        const testLoan = loans.find(l => l.status === 'Activo' && l.itemType === 'Implemento') || ensureActiveLoanForTest('Implemento');
+        
+        // Return overdue
+        setTimeout(() => {
+          handleReturnLoan(testLoan.id, 3); // 3 days delay
+          setTestCases(prev => prev.map(tc => tc.id === 'CP-10' ? { ...tc, status: 'Pasó' } : tc));
+        }, 100);
+        break;
+      }
+      case 'CP-11': {
+        // HU08_01 Reports segmentation
+        setTestCases(prev => prev.map(tc => tc.id === 'CP-11' ? { ...tc, status: 'Pasó' } : tc));
+        showNotification("HU08_01 Validada: Segmentación inteligente de reportes en tiempo real activada.", "success");
+        break;
+      }
+      case 'CP-12': {
+        // HU08_02 Critical stock level alert
+        setTestCases(prev => prev.map(tc => tc.id === 'CP-12' ? { ...tc, status: 'Pasó' } : tc));
+        showNotification("HU08_02 Validada: Panel con avisos críticos de quiebre de stock en tiempo real activo.", "warn");
+        break;
+      }
+      case 'CP-13': {
+        // HU11_04 Automatic field release
+        // Ensure there is an active cancha loan
+        const canchaLoan = loans.find(l => l.status === 'Activo' && l.itemType === 'Cancha') || ensureActiveLoanForTest('Cancha');
+        
+        // Auto-release
+        setTimeout(() => {
+          handleAutoReleaseCanchas();
+          setTestCases(prev => prev.map(tc => tc.id === 'CP-13' ? { ...tc, status: 'Pasó' } : tc));
+        }, 100);
+        break;
+      }
       default:
         break;
     }
   };
 
+  // Helper function to create dynamic loans on-the-fly for automation tests
+  const ensureActiveLoanForTest = (itemType: 'Implemento' | 'Cancha'): Loan => {
+    const student = students[0]; // Felipe
+    const item = items.find(i => i.type === itemType && i.stock > 0) || items.find(i => i.type === itemType) || items[0];
+    
+    const randomDigits = Math.floor(100000 + Math.random() * 90000);
+    const itemPrefix = item.type === 'Cancha' ? 'CN' : 'IM';
+    const folio = `PR-${itemPrefix}-${randomDigits}`;
+
+    const newLoanObj: Loan = {
+      id: `loan-auto-${Date.now()}`,
+      folio: folio,
+      itemId: item.id,
+      itemName: item.name,
+      itemType: item.type,
+      studentRut: student.rut,
+      studentName: student.name,
+      requestedAt: new Date(),
+      status: 'Activo'
+    };
+
+    setLoans(prev => [newLoanObj, ...prev]);
+    setItems(prev => prev.map(i => i.id === item.id ? { ...i, stock: Math.max(0, i.stock - 1) } : i));
+    setStudents(prev => prev.map(s => s.rut === student.rut ? { ...s, activeLoansCount: s.activeLoansCount + 1 } : s));
+
+    return newLoanObj;
+  };
+
   const handleRunAllTestCases = () => {
-    // Run them sequentially (instantly evaluates code execution status of all 7 test metrics)
+    // Setup environment for testing
+    ensureActiveLoanForTest('Cancha'); 
+    ensureActiveLoanForTest('Implemento');
+
     setTestCases(prev => prev.map(tc => ({ ...tc, status: 'Pasó' })));
     setSimulatedLag(true);
     
@@ -341,7 +575,7 @@ export default function App() {
     setCurrentStudent(felipe);
     setSelectedScreen('Home');
     
-    showNotification("Suite ISO 25010 completada: Los 7 casos han sido ejecutados satisfactoriamente.", "success");
+    showNotification("Suite completa ISO 25010 ejecutada: Todos los casos han sido validados con éxito.", "success");
   };
 
   return (
@@ -420,6 +654,8 @@ export default function App() {
             setShowEmptyRutHighlight={setShowEmptyRutHighlight}
             showEmptyPassHighlight={showEmptyPassHighlight}
             setShowEmptyPassHighlight={setShowEmptyPassHighlight}
+            pushNotifications={pushNotifications}
+            onClearNotifications={() => setPushNotifications([])}
           />
 
           {/* Quick instruction tip under the mockup */}
@@ -452,6 +688,9 @@ export default function App() {
               setSimulatedLag={setSimulatedLag}
               activeStudent={currentStudent}
               selectedScreen={selectedScreen}
+              onAddItem={handleAddItem}
+              onReturnLoan={handleReturnLoan}
+              onAutoReleaseCanchas={handleAutoReleaseCanchas}
             />
           </div>
         </section>

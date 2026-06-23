@@ -208,6 +208,66 @@ export const INITIAL_TEST_CASES: TestCase[] = [
     expectedResult: "Oculta artículos con stock 0 de forma dinámica (Se corrigió BUG-01).",
     status: "Sin Ejecutar",
     isoCharacteristic: "Exactitud Ocupacional"
+  },
+  {
+    id: "CP-08",
+    title: "Bloqueo de implementos con información incompleta",
+    hu: "HU04",
+    context: "El administrador intenta registrar un implemento dejando Nombre o Cantidad vacíos",
+    event: "Hace clic en el botón 'Guardar'",
+    expectedResult: "El sistema detiene el registro, resalta en rojo los campos obligatorios vacíos y muestra un mensaje de error sin alterar la BD.",
+    status: "Sin Ejecutar",
+    isoCharacteristic: "Tolerancia a Fallas / Adecuación Funcional"
+  },
+  {
+    id: "CP-09",
+    title: "Devolución en fecha acordada",
+    hu: "HU07_01",
+    context: "Existe un préstamo 'Activo' devuelto en fecha vigente o posterior",
+    event: "Ingresa código de barras/QR en devolución",
+    expectedResult: "El préstamo pasa a 'Finalizado', el stock disponible se incrementa en +1 en tiempo real y se libera el cupo del alumno.",
+    status: "Sin Ejecutar",
+    isoCharacteristic: "Corrección Funcional / Exactitud"
+  },
+  {
+    id: "CP-10",
+    title: "Devolución tardía con multa",
+    hu: "HU07_02",
+    context: "El préstamo se encuentra vencido en la simulación",
+    event: "Recibe el recurso con atraso mediante panel de control",
+    expectedResult: "Calcula días transcurridos, cierra el préstamo, carga la multa en la ficha y actualiza el estado del alumno a 'Moroso'.",
+    status: "Sin Ejecutar",
+    isoCharacteristic: "Cálculo Lógico / Reglas de Negocio"
+  },
+  {
+    id: "CP-11",
+    title: "Segmentación de reportes en tiempo real",
+    hu: "HU08_01",
+    context: "En la pestaña de Reportes/Dashboard como Administrador",
+    event: "Aplica filtros de rango de fechas y categoría",
+    expectedResult: "Actualiza métricas y gráficos dinámicamente sin recargar la página.",
+    status: "Sin Ejecutar",
+    isoCharacteristic: "Eficiencia de Desempeño / Usabilidad"
+  },
+  {
+    id: "CP-12",
+    title: "Alertas críticas de stock bajo",
+    hu: "HU08_02",
+    context: "Existen implementos en estado crítico de inventario",
+    event: "Renderiza el panel de informes",
+    expectedResult: "Resalta visualmente en color rojo los implementos con alto riesgo de quiebre.",
+    status: "Sin Ejecutar",
+    isoCharacteristic: "Soporte de Decisiones / Visibilidad"
+  },
+  {
+    id: "CP-13",
+    title: "Auto-liberación de canchas por inasistencia",
+    hu: "HU11_04",
+    context: "Cancha reservada hace más de 15 minutos sin registrar ingreso vía código QR",
+    event: "El reloj del servidor (o simulador de tolerancia) gatilla la inasistencia",
+    expectedResult: "Libera la cancha de forma automática (stock +1), cambia estado, le envía notificación push e historializa.",
+    status: "Sin Ejecutar",
+    isoCharacteristic: "Eficacia de Recursos / Automatización"
   }
 ];
 

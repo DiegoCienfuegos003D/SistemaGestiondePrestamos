@@ -7,6 +7,7 @@ export interface Student {
   status: StudentStatus;
   email: string;
   activeLoansCount: number;
+  fineBalance?: number; // Economic penalty balance
 }
 
 export type ItemType = 'Implemento' | 'Cancha';
@@ -31,7 +32,11 @@ export interface Loan {
   studentRut: string;
   studentName: string;
   requestedAt: Date;
-  status: 'Activo' | 'Devuelto';
+  status: 'Activo' | 'Devuelto' | 'Cancelado'; // "Cancelado" represents late release/failure to attend 
+  returnedAt?: Date;
+  delayDays?: number;
+  fineCharged?: number;
+  autoReleased?: boolean; // For HU11_04 automatic field release
 }
 
 export interface TestCase {

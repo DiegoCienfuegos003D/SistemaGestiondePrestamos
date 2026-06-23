@@ -28,6 +28,8 @@ interface InteractiveAppProps {
   setShowEmptyRutHighlight: React.Dispatch<React.SetStateAction<boolean>>;
   showEmptyPassHighlight: boolean;
   setShowEmptyPassHighlight: React.Dispatch<React.SetStateAction<boolean>>;
+  pushNotifications?: { id: string; message: string; timestamp: Date }[];
+  onClearNotifications?: () => void;
 }
 
 export default function InteractiveApp({
@@ -51,7 +53,9 @@ export default function InteractiveApp({
   showEmptyRutHighlight,
   setShowEmptyRutHighlight,
   showEmptyPassHighlight,
-  setShowEmptyPassHighlight
+  setShowEmptyPassHighlight,
+  pushNotifications = [],
+  onClearNotifications
 }: InteractiveAppProps) {
   
   // App local controls
@@ -235,7 +239,30 @@ export default function InteractiveApp({
       </div>
 
       {/* Screen Area */}
-      <div className="flex-1 overflow-y-auto pt-6 flex flex-col bg-white">
+      <div className="flex-1 overflow-y-auto pt-6 flex flex-col bg-white relative">
+        
+        {/* PUSH NOTIFICATIONS BANNER (HU11_04 automatic release notifications etc) */}
+        {pushNotifications.length > 0 && (
+          <div className="absolute top-[8px] left-2 right-2 bg-gradient-to-r from-[#FFA000] to-amber-500 text-[#002F6C] p-2.5 rounded-2xl shadow-xl z-50 animate-bounce text-[10.5px] font-bold border border-white">
+            <div className="flex items-start justify-between gap-1">
+              <div className="flex-1">
+                <span className="block text-[8px] uppercase font-black text-amber-950 tracking-wider">🛎️ DUOC NOTIFICACIÓN</span>
+                <p className="mt-0.5 leading-snug">{pushNotifications[pushNotifications.length - 1].message}</p>
+                <span className="text-[7.5px] text-amber-900/80 block mt-0.5">
+                  Hora: {new Date(pushNotifications[pushNotifications.length - 1].timestamp).toLocaleTimeString()}
+                </span>
+              </div>
+              <button 
+                onClick={onClearNotifications} 
+                className="text-[9px] font-black bg-[#002F6C] text-white hover:bg-[#002554] w-4 h-4 rounded-full flex items-center justify-center shrink-0 cursor-pointer ml-1"
+                title="Descartar"
+                id="btn-dismiss-push-notif"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
         
         {/* LOGIN SCREEN */}
         {selectedScreen === 'Login' && (
