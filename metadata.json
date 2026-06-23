@@ -1,0 +1,6 @@
+{
+  "name": "Sistema de Gestión de Préstamos Duoc UC",
+  "description": "Sistema web de gestión de préstamos de implementos y canchas deportivas para Duoc UC de acuerdo con la norma de calidad ISO 25000 (SQuaRE).",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
